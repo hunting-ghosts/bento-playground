@@ -1,0 +1,1 @@
+SECTIONS { . = 0x081b9420; .pad : { *(.pad) *(.padr*) } . = 0x081bc6a0; .pad2 : { *(.pad2) *(.pad2r*) } . = 0x081bd180; .pad3 : { *(.pad3) *(.pad3r*) } . = 0x081be0c0; .text : { *(.text*) *(.rodata*) } /DISCARD/ : { *(.ARM.exidx*) *(.ARM.extab*) *(.comment*) } }

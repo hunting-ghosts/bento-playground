@@ -1,0 +1,43 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bento Playground · __LABEL__ patcher</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#111;color:#eee;font:16px system-ui;line-height:1.5}main{max-width:670px;margin:8vh auto;padding:28px}h1{font-size:36px;letter-spacing:-1px;margin-bottom:8px}.sub{color:#aaa}section{border:1px solid #444;border-radius:12px;padding:22px;margin:24px 0}label{display:block;font-weight:600;margin:18px 0 8px}input{max-width:100%;color:#ddd}button{background:#eee;color:#111;border:0;border-radius:7px;font:600 16px system-ui;padding:13px 22px;cursor:pointer;margin-top:24px}button:disabled{opacity:.4;cursor:wait}#status{white-space:pre-wrap;border-left:3px solid #777;padding:12px 16px;margin:22px 0;overflow-wrap:anywhere}.small{font-size:13px;color:#aaa}summary{cursor:pointer}code{overflow-wrap:anywhere}</style>
+<main><div class="sub">BENTO PLAYGROUND · __LABEL__</div><h1>Offline firmware patcher</h1><p>Choose the two files from your <strong>original Bento 1.6.1</strong> download. Processing stays on your computer. Nothing is uploaded.</p>
+<section><label for="main">1 · Original bento1.bin</label><input id="main" type="file"><label for="controller">2 · Original bento2.bin</label><input id="controller" type="file"><br><button id="create">3 · Create firmware ZIP</button><div id="status" role="status">Ready. Your original files will stay unchanged.</div></section>
+<p>Your ZIP includes the experimental firmware, synth loading markers and a copy of your original firmware to go back to.</p><p class="sub">Back up your projects first. Follow 00_START_HERE.txt in the ZIP and check for <strong>__LABEL__</strong> on Bento.</p>
+<details><summary>Included functionality</summary><p>__RELEASE_OVERVIEW__</p><p>Unofficial experimental firmware. Back up projects and retain the original firmware pair. Hardware acceptance remains pending.</p></details>
+<p class="small">The patcher never flashes or connects to the device. It accepts only the exact supported files and verifies the finished application image. Controller unchanged; no bootloader patch. Unsupported inputs are refused.</p><p class="small" id="fingerprint"></p></main>
+<script>
+'use strict';
+const PATCH=__PATCH_DATA__;
+const encoder=new TextEncoder();
+function decode(s){const b=atob(s);return Uint8Array.from(b,c=>c.charCodeAt(0));}
+async function sha(data){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data)),b=>b.toString(16).padStart(2,'0')).join('');}
+async function applyPatch(stock,controller,p=PATCH){
+ if(p.format!=='bento-delta-v1')throw Error('Unsupported patch format.');
+ if(stock.length!==p.input_size || await sha(stock)!==p.input_sha256)throw Error('That main firmware is not the supported original Bento 1.6.1 file. Use bento1.bin from the original download, not an earlier mod.');
+ if(await sha(controller)!==p.controller_sha256)throw Error('That controller firmware is not the supported original file.');
+ if(!Number.isInteger(p.output_size)||p.output_size<stock.length||p.output_size>0x1a0000||p.output_size%4)throw Error('Invalid application size.');
+ const result=new Uint8Array(p.output_size);result.set(stock);let end=0;
+ for(const [offset,encoded] of p.writes){const bytes=decode(encoded);if(!Number.isInteger(offset)||offset<end||offset<0||offset+bytes.length>result.length)throw Error('Invalid patch bounds.');result.set(bytes,offset);end=offset+bytes.length;}
+ if(await sha(result)!==p.output_sha256)throw Error('Finished firmware verification failed. No download created.');
+ return result;
+}
+const CRC=Uint32Array.from({length:256},(_,n)=>{for(let k=0;k<8;k++)n=n&1?0xedb88320^(n>>>1):n>>>1;return n>>>0;});
+function crc32(bytes){let crc=0xffffffff;for(const b of bytes)crc=CRC[(crc^b)&255]^(crc>>>8);return (crc^0xffffffff)>>>0;}
+function put(view,offset,n,bytes=4){bytes===2?view.setUint16(offset,n,true):view.setUint32(offset,n,true);}
+function zipFiles(files){const parts=[],central=[];let offset=0,size=0;
+ for(const [name,data] of files){const path=encoder.encode(name),crc=crc32(data),local=new Uint8Array(30+path.length),v=new DataView(local.buffer);put(v,0,0x04034b50);put(v,4,20,2);put(v,6,0x800,2);put(v,10,0,2);put(v,12,0x21,2);put(v,14,crc);put(v,18,data.length);put(v,22,data.length);put(v,26,path.length,2);local.set(path,30);parts.push(local,data);
+ const c=new Uint8Array(46+path.length),d=new DataView(c.buffer);put(d,0,0x02014b50);put(d,4,20,2);put(d,6,20,2);put(d,8,0x800,2);put(d,12,0,2);put(d,14,0x21,2);put(d,16,crc);put(d,20,data.length);put(d,24,data.length);put(d,28,path.length,2);put(d,42,offset);c.set(path,46);central.push(c);size+=c.length;offset+=local.length+data.length;}
+ const end=new Uint8Array(22),v=new DataView(end.buffer);put(v,0,0x06054b50);put(v,8,files.length,2);put(v,10,files.length,2);put(v,12,size);put(v,16,offset);return new Blob([...parts,...central,end],{type:'application/zip'});
+}
+async function makeZip(stock,controller,result){
+ const readme=`Bento ${PATCH.label} experimental test\n\n1. Back up your projects.\n2. Copy BOTH files from 01_TEST_FIRMWARE to the SD root.\n3. If needed copy the loading markers from 02_SD_CONTENT/Projects into Projects.\n4. Update using the normal SD procedure and confirm ${PATCH.label}.\n5. Restore using BOTH files from 03_STOCK_RESTORE.\n\nMarkers are silent synth selectors, not playable samples.\nApplication firmware only. Controller unchanged; bootloader not patched.\nSoftware checked; hardware validation pending. See the release notes for known limitations.\nMain SHA-256: ${PATCH.output_sha256}\n`;
+ const files=[['00_START_HERE.txt',encoder.encode(readme)],['01_TEST_FIRMWARE/bento1.bin',result],['01_TEST_FIRMWARE/bento2.bin',controller],['03_STOCK_RESTORE/bento1.bin',stock],['03_STOCK_RESTORE/bento2.bin',controller]];
+ for(const [name,b64] of Object.entries(PATCH.carriers)){if(/[\\/]/.test(name)||!name.endsWith('.wav'))throw Error('Invalid synth marker name.');files.push(['02_SD_CONTENT/Projects/'+name,decode(b64)]);}
+ if(PATCH.source_url)files.push(['SOURCE.txt',encoder.encode(PATCH.source_url+'\nProject additions: GPL-3.0-or-later; vendored code retains its licenses.\n')]);
+ let sums='';for(const [name,data] of files)sums+=await sha(data)+'  '+name+'\n';files.push(['SHA256SUMS.txt',encoder.encode(sums)]);return zipFiles(files);
+}
+document.getElementById('fingerprint').textContent='Expected output SHA-256: '+PATCH.output_sha256;
+document.getElementById('create').onclick=async()=>{const status=document.getElementById('status'),button=document.getElementById('create');button.disabled=true;
+ try{const main=document.getElementById('main').files[0],controller=document.getElementById('controller').files[0];if(!main||!controller)throw Error('Choose both original firmware files first.');if(!globalThis.crypto?.subtle)throw Error('This browser does not provide local file verification. Open this file in a current Chrome, Firefox or Safari browser.');status.textContent='Checking original files…';const stock=new Uint8Array(await main.arrayBuffer()),board=new Uint8Array(await controller.arrayBuffer());const result=await applyPatch(stock,board);status.textContent='Verified. Preparing your ZIP…';const zip=await makeZip(stock,board,result),url=URL.createObjectURL(zip),a=document.createElement('a');a.href=url;a.download=PATCH.install_filename||'Bento_'+PATCH.label.replace(/\./g,'')+'_Install.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);status.textContent='Done — verified '+PATCH.label+'. Your ZIP has the firmware, synth loading markers and restore files.';}
+ catch(e){status.textContent=e.message;}finally{button.disabled=false;}};
+</script></html>

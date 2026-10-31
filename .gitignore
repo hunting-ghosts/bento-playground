@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.elf
+*.o
+*.a
+*.so
+*.bin
+*.wav
+*.zip
+*.bundle
+.DS_Store
+build/
+private_firmware/
+.venv/
