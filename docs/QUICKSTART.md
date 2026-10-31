@@ -4,7 +4,7 @@ You'll need your own original **Bento 1.6.1** download, with both
 `bento1.bin` and `bento2.bin`. Older modified files won't work.
 
 1. Download `Bento_Alpha_1.0_Offline_Patcher.zip` from the
-   [Alpha 1.0 release](https://github.com/t4kbsv99sn-source/bento-playground/releases/tag/alpha-1.0).
+   [Alpha 1.0 release](https://github.com/hunting-ghosts/bento-playground/releases/tag/alpha_1.0).
 2. Extract it and open `OPEN_BENTO_PATCHER.html` in a current browser.
 3. Choose both original files and click **Create firmware ZIP**.
 4. Open the new ZIP and read `00_START_HERE.txt`. Back up your projects

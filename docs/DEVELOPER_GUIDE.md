@@ -36,7 +36,7 @@ To prepare the offline patcher from that image and your original pair:
 ```sh
 python tools/package_patcher.py --stock-dir /path/to/original \
   --image build/alpha-10/bento1.bin --out build/alpha-10-patcher \
-  --source-url https://github.com/t4kbsv99sn-source/bento-playground/tree/alpha-1.0
+  --source-url https://github.com/hunting-ghosts/bento-playground/tree/alpha_1.0
 python tools/test_patcher.py --patcher build/alpha-10-patcher \
   --stock-dir /path/to/original --image build/alpha-10/bento1.bin
 ```

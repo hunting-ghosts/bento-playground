@@ -32,7 +32,7 @@ Quoted directly from a 1010music developer on Discord, regarding Blackbox moddin
 
 ## Try Alpha 1.0
 
-[**Download the offline patcher**](https://github.com/t4kbsv99sn-source/bento-playground/releases/tag/alpha-1.0) ·\
+[**Download the offline patcher**](https://github.com/hunting-ghosts/bento-playground/releases/tag/alpha_1.0) ·\
 [Installation and restore](docs/QUICKSTART.md) ·\
 [Known issues](docs/STATUS.md) ·\
 [Build from source](docs/DEVELOPER_GUIDE.md)
