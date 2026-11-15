@@ -1,0 +1,399 @@
+diff --git a/bento_mods/AUDIT.json b/bento_mods/AUDIT.json
+index c1d8cad..9d1e56c 100644
+--- a/bento_mods/AUDIT.json
++++ b/bento_mods/AUDIT.json
+@@ -34,7 +34,7 @@
+     },
+     "consumer": {
+       "address": "0x08141408",
+-      "original": "a5f11103"
++      "original": "3378113b"
+     }
+   },
+   "source_sha256": {
+diff --git a/bento_mods/profiles/bento-1.6.1.json b/bento_mods/profiles/bento-1.6.1.json
+index c8f19cc..401adf2 100644
+--- a/bento_mods/profiles/bento-1.6.1.json
++++ b/bento_mods/profiles/bento-1.6.1.json
+@@ -10,7 +10,7 @@
+     },
+     "consumer": {
+       "address": "0x08141408",
+-      "original": "a5f11103"
++      "original": "3378113b"
+     }
+   },
+   "symbols": {
+diff --git a/eu4_work/drums/bento-1.6.1.json b/eu4_work/drums/bento-1.6.1.json
+index 32e2287..e941acc 100644
+--- a/eu4_work/drums/bento-1.6.1.json
++++ b/eu4_work/drums/bento-1.6.1.json
+@@ -10,7 +10,7 @@
+     },
+     "consumer": {
+       "address": "0x08141408",
+-      "original": "a5f11103"
++      "original": "3378113b"
+     }
+   },
+   "symbols": {
+@@ -205,4 +205,4 @@
+     "synth": "DaisySP SyntheticBassDrum",
+     "dedicated_synth_controls": false
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/eu4_work/drums/build.py b/eu4_work/drums/build.py
+index f9ae53d..6c9c8af 100644
+--- a/eu4_work/drums/build.py
++++ b/eu4_work/drums/build.py
+@@ -56,7 +56,7 @@ def candidate(stock):
+  payload+=bytes(gap)+selection
+  payload+=b'\xff'*(-(len(stock)+len(payload))%4)
+  put(BASE+len(stock),payload,b'','Appended UI implementation')
+- for a,target,old,name in [(0x0808dcde,INPUT,'9c42f6d0','input'),(0x08141408,CONSUMER,'a5f11103','consumer'),(0x080404b6,STARTUP,'24482449','startup'),(0x081004b6,UI_STARTUP,'24482449','UI startup'),(0x0813d504,SELECTION,'f0b589b0','Drum selection observer')]:
++ for a,target,old,name in [(0x0808dcde,INPUT,'9c42f6d0','input'),(0x08141408,CONSUMER,'3378113b','consumer'),(0x080404b6,STARTUP,'24482449','startup'),(0x081004b6,UI_STARTUP,'24482449','UI startup'),(0x0813d504,SELECTION,'f0b589b0','Drum selection observer')]:
+   put(a,bytes(ks.asm('b.w '+hex(target),a)[0]),bytes.fromhex(old),name+' branch')
+  for a in [0x08040588,0x080a437c,0x080a4634]:put(a,struct.pack('<I',HEAP_END),struct.pack('<I',OLD_END),'Reserve 28064 bytes: kick, lock, condition and UI state; stack unchanged')
+  from plock_hooks import payloads,COMMAND,SEQUENCE,EVALUATE
+@@ -84,7 +84,7 @@ def candidate(stock):
+  put(0x081a0be8,struct.pack('<I',0x081b7f11),struct.pack('<I',0x0814d239),'Native mixer render adapter runs on UI thread')
+  color=p['empty_step_color']
+  put(int(color['address'],0),bytes.fromhex(color['replacement_hex']),bytes.fromhex(color['original_hex']),'Unlit empty steps; native active-step track color remains unchanged')
+- put(0x0818dd94,b'1.6K7\0',b'1.6.1\0','Visible experiment identifier')
++ put(0x0818dd94,b'1.6K7\0',b'1.6.8\0','Visible experiment identifier')
+  result=bytes(image)
+  assert restore(result,writes)==stock
+  for a,n in [(BASE,0x400),(0x080e0000,0x20000),(0x08100000,0x400)]:assert result[a-BASE:a-BASE+n]==stock[a-BASE:a-BASE+n]
+diff --git a/eu4_work/drums/consumer.s b/eu4_work/drums/consumer.s
+index 4b7239b..b9ea879 100644
+--- a/eu4_work/drums/consumer.s
++++ b/eu4_work/drums/consumer.s
+@@ -1,18 +1,20 @@
++// 1.6.8 port: the native loop keeps the 24-byte event record at r6 (sp+0x218) and
++// switches on ldrb [r6]-0x11 (hooks_168.py 'consumer'); 1.6.1 had it in r5..r7.
+ push.w {r0-r12, lr}
+ sub sp, #8
+-add.w r0, sp, #608
+-str r0, [sp]
++str r6, [sp]
+ mov r0, r4
+-mov r1, r5
+-mov r2, r6
+-mov r3, r7
++ldrb r1, [r6]
++ldr r2, [r6, #8]
++ldr r3, [r6, #12]
+ ldr r12, =0x081b7011
+ blx r12
+ cmp r0, #0
+ add sp, #8
+ pop.w {r0-r12, lr}
+ bne consumed
+-sub.w r3, r5, #17
++ldrb r3, [r6]
++subs r3, #0x11
+ push {r0, r1}
+ ldr r0, =@DISPATCH_STOCK@
+ str r0, [sp, #4]
+diff --git a/eu4_work/integration/build_fx.py b/eu4_work/integration/build_fx.py
+index 5929d86..2a9abbb 100644
+--- a/eu4_work/integration/build_fx.py
++++ b/eu4_work/integration/build_fx.py
+@@ -21,7 +21,7 @@ UI_PADS=[(0x081b7b10,0x081b7f10),(0x081b8310,0x081b8710),(0x081b8810,0x081b8f10)
+ # Retired K16 C bodies only; all original four-byte forwarding entries remain.
+ # The live native encoder wrapper owns 081BC660..081BC6A0.
+ # No native resources or bitmap pixels are part of these regions.
+-UI_RETIRED=[(0x081b7910,0x081b7b10),(0x081b7f80,0x081b8110),
++UI_RETIRED=[(0x081b7920,0x081b7b10),(0x081b7f80,0x081b8110),
+             (0x081ba314,0x081ba5bc),(0x081ba5c0,0x081ba7c8),(0x081ba7cc,0x081bab6c),
+             (0x081bab70,0x081baec4),(0x081bafd8,0x081bbb10),
+             (0x081bbb14,0x081bbc10),(0x081bbc14,0x081bbd10),
+@@ -33,19 +33,25 @@ UI_RETIRED=[(0x081b7910,0x081b7b10),(0x081b7f80,0x081b8110),
+ # (guard). Usable by the M4 only with the widened MPU (BENTO_M4_MPU_WIDE=1,
+ # region 1 = 08000000/2 MB); the build refuses bank-1 M4 code otherwise.
+ # 080D08AE..080D1000 stays with seqfx (M7).
+-UI_BANK1=[(0x080d5960,0x080d6000),(0x080dbcd0,0x080dc000),
++# 1.6.8 port: the .bank1a slot (080D5960..080D6000) holds part of the ratchet player;
++# new M4 pads in stock-zero gaps between our M7 pieces (16-byte guard in front).
++# P168 exp8: 080DB8B0..080DB9F0 (former .bank1h pad) holds the XY M7 code (port/xy_168.py).
++UI_BANK1=[(0x080dbcd0,0x080dc000),(0x080d2060,0x080d20f0),(0x080d1e70,0x080d1ef0),(0x080d0190,0x080d01f0),(0x080d02a0,0x080d02f0),
+           (0x080d0510,0x080d0800),(0x080d1180,0x080d1400),(0x080d1f20,0x080d2000),(0x080d2140,0x080d2400),(0x080d3190,0x080d33c0)]
+ # zero in stock, K16, R6.10 and R6.14 (R6.14 caves: no pointers into them; the
+ # PLAY code at 080D0200/080D0300 is bounded below 080D0500, see play_input/play_bank)
+-BANK1_RUNS=[(0x080d5946,0x080d6000),(0x080dbcba,0x080dc000),(0x080d0500,0x080d0800),(0x080d1170,0x080d1400),(0x080d1f10,0x080d2000),(0x080d2130,0x080d2400),(0x080d3180,0x080d33c0)]
++BANK1_RUNS=[(0x080d204c,0x080d20f0),(0x080d1e5c,0x080d1ef0),(0x080d017d,0x080d01f0),(0x080d028c,0x080d02f0),(0x080dbcba,0x080dc000),(0x080d0500,0x080d0800),(0x080d1170,0x080d1400),(0x080d1f10,0x080d2000),(0x080d2130,0x080d2400),(0x080d3180,0x080d33c0)]
+ UI_ADAPTER_TAIL=None
+-PAD_RESERVE=8 # bytes kept free per pad by the pad filler (layout parameter)
++PAD_RESERVE=4 # 1.6.8 port: tighter (bounds re-verified after every link); bytes kept free per pad by the pad filler (layout parameter)
+ BANK1B=0x080dbcd0 # .bank1b start; the P14 adapters must end 16 bytes below it
+ RT_CAVE=(0x080cf4c0,0x080cfff0);RT_RUN=0x080cf4a0 # R6.13: stock zero 080CF499..080D0000
+ # Ratchet player slots (version layout; 1.6.1: one slot = RT_CAVE, checked from RT_RUN).
+-RT_SLOTS=[RT_CAVE];RT_FUNCTION_SECTIONS=False
++# 1.6.8 port: native M7 code now ends 080CFC59; the player is split by function over
++# three checked zero slots (ratchet_audio.ld): .rta after the new M7 end, .rtb the former
++# .bank1a slot, .rtc after the seqfx code.
++RT_SLOTS=[(0x080cfc80,0x080cfff0),(0x080d5960,0x080d5ff0),(0x080d0e80,0x080d0ff0)];RT_CAVE=RT_SLOTS[0];RT_RUN=0x080cfc70;RT_FUNCTION_SECTIONS=True
+ RT2_CAVE=(0x080da640,0x080dabf0) # R6.16c: stock-zero tail of the Kick code reservation (Kick code now ends <= 080DA620), no pointers into it
+-K16_SHA='5e72971b31388201454a71b0be7cc61ad40915bda3a75e635d104dd89346a03d'
++K16_SHA='08f0a83e789793fdd2d73107796646650dba4d8b293a3690c52f4081d297f07b' # 1.6.8 port: K16 layer built on stock 1.6.8
+ # Native adapters and compiled-code fixtures call these across ELF boundaries.
+ # LTO must retain their external identity, even when all C callers are inlined.
+ UI_EXPORTS="""fx_value_text fx_value_fmt bb_boot bb_card tr_tick tr_block tr_get tr_set tr_lights chord_pad_pitch chord_project_scale arp_diag arp_publish bars_bind bars_count bars_event bars_header bars_index bars_names bars_registry bars_set bars_text bars_title browser_list_hook browser_list_add browser_request
+@@ -273,7 +279,7 @@ def compile():
+  assert len(CONTROLS_CODE)==2
+  # Rebuilt controls retire their old trailing C bodies, not native assets.
+  assert all(lo==address and address+len(data)<=hi
+-            for (address,data),(lo,hi) in zip(CONTROLS_CODE,[(0x081b7010,0x081b7910),(0x081b7f10,0x081b7f80)]))
++            for (address,data),(lo,hi) in zip(CONTROLS_CODE,[(0x081b7010,0x081b7920),(0x081b7f10,0x081b7f80)]))
+  sys.path.insert(0,str(R.parents[1]/'k16_work/bento_controls'))
+  import step_locks
+  _,native_lock=step_locks.compile_one('step_lock_audio','cortex_m7',True)
+@@ -300,7 +306,7 @@ def compile():
+  ARP_CODE,ARP_SYMS=xc[0][1],xs
+  # R6.6 transpose (M7) in the checked zero cave 080D08B0..080D1000.
+  subprocess.run([*mel_cmd,'-Wl,--entry=tr_note_pitch','-Wl,--script='+str(R/'seqfx_audio.ld'),str(R/'seqfx_audio.cpp'),'-o',str(R/'seqfx_audio.elf')],check=True)
+- qc,qs=elf(R/'seqfx_audio.elf');assert len(qc)==1 and qc[0][0]==0x080d08b0 and len(qc[0][1])<=0x750,(len(qc[0][1]) if qc else 0,'seqfx bounds')
++ qc,qs=elf(R/'seqfx_audio.elf');assert len(qc)==1 and qc[0][0]==0x080d08b0 and len(qc[0][1])<=0x5c0,(len(qc[0][1]) if qc else 0,'seqfx bounds')
+  SEQFX_CODE,SEQFX_SYMS=qc[0][1],qs
+  (R/'seqfx_api.h').write_text('/* Generated R6.6 transpose APIs. */\n'+''.join('#define '+n.upper()+' '+hex(qs[n])+'u\n' for n in ['tr_press','tr_release','tr_note_pitch','tr_off_pitch']))
+  (R/'arp_api.h').write_text('/* Generated P28 arp APIs. */\n'+''.join('#define '+n.upper()+' '+hex(xs[n])+'u\n' for n in ['arp_press','arp_release','arp_clock','arp_block']))
+@@ -754,7 +760,8 @@ def build(base):
+  assert base[0x0813ca4e-BASE:0x0813ca52-BASE]==asm('ldr r3,[sp,#0x114]; movs r2,#0x73',0x0813ca4e)
+  a=ub(integer_prefix+'ldr r0,[sp,#76]; ldr r1,[sp,#340]; ldr r2,[sp,#80]; bl '+hex(uu['live_cycle_restore'])+'; '+integer_restore+'ldr r3,[sp,#0x114]; movs r2,#0x73; b.w 0x0813ca52')
+  site(0x0813ca4e,'b.w '+hex(a),'Restore per-sound cycle metadata only after successful native note Undo')
+- a=ub(integer_prefix+'sub sp,#8; add.w r0,sp,#616; str r0,[sp]; mov r0,r4; mov r1,r5; mov r2,r6; mov r3,r7; bl '+hex(uu['fx_dispatch'])+'; add sp,#8; cmp r0,#0; beq old; '+integer_restore+'b.w 0x08140dee; old: '+integer_restore+'b.w 0x081b6e50')
++ # 1.6.8 port (hooks_168 'consumer'): the event record is at r6, fields loaded from it
++ a=ub(integer_prefix+'sub sp,#8; str r6,[sp]; mov r0,r4; ldrb r1,[r6]; ldr r2,[r6,#8]; ldr r3,[r6,#12]; bl '+hex(uu['fx_dispatch'])+'; add sp,#8; cmp r0,#0; beq old; '+integer_restore+'b.w 0x08140dee; old: '+integer_restore+'b.w 0x081b6e50')
+  site(0x08141408,'b.w '+hex(a),'TF2 Double-tap TRACKS shortcut before unchanged K16 consumer')
+  assert base[0x08125b5c-BASE:0x08125b64-BASE]==asm('push.w {r4-r11,lr}; sub sp,#44; mov r4,r0',0x08125b5c)
+  site(0x08125b5c,'b.w '+hex(uu['play_mute_flush']),'W22 transient PLAY mute colours around native LED flush')
+@@ -850,14 +857,14 @@ def build(base):
+  site(0x08181c7c,'b.w '+hex(a),'P12 custom controls at final native header application')
+  assert base[0x0815de9e-BASE:0x0815dea0-BASE]==bytes.fromhex('a523')
+  put(0x0815de9e,asm('movs r3,#190',0x0815de9e),'W14 centre native pad selector between name column and Euclidean tab')
+- replay=ub('push.w {r4-r10,lr}; b.w 0x08135d78')
++ replay=ub('push.w {r4-r9,lr}; b.w 0x08135d78') # 1.6.8 prologue (hooks_168 'header_actions')
+  a=ub('push {r4,r5,r6,lr}; mov r4,r0; mov r5,r1; bl '+hex(replay)+'; mov r2,r0; mov r0,r4; mov r1,r5; bl '+hex(uu['seq_toolbar'])+'; pop {r4,r5,r6,pc}')
+- assert base[0x08135d74-BASE:0x08135d78-BASE]==bytes.fromhex('2de9f047')
++ assert base[0x08135d74-BASE:0x08135d78-BASE]==bytes.fromhex('2de9f043')
+  site(0x08135d74,'b.w '+hex(a),'Persistent header custom actions (Select/Chord) with visibility sync')
+  # FA has five equal native menu columns; fifth was unused. Insert Select
+  # after Undo and shift Length+/Length-/Duplicate intact into cells3..5.
+  menu=bytearray(base[0x0819b8e8-BASE:0x0819b8e8-BASE+100])
+- assert struct.unpack_from('<I',menu)[0]==0x1032
++ assert struct.unpack_from('<I',menu)[0]==0x1034 # 1.6.8 Undo id (ui_ids.py)
+  entry=struct.pack('<5I',0x1051,uu['select_label'],0,0,1)
+  new=menu[:80]+entry
+  put(0x0819b8e8,new,'EU10 native Undo Select Length+ Length- Duplicate menu')
+@@ -867,7 +874,7 @@ def build(base):
+  # F9 has eight actions and a blank fourth cell. Reuse that blank: native
+  # popup application accepts at most nine entries, despite ten stored slots.
+  old_menu=base[0x0819b2a8-BASE:0x0819b2a8-BASE+180]
+- assert struct.unpack_from('<I',old_menu)[0]==0x1032
++ assert struct.unpack_from('<I',old_menu)[0]==0x1034 # 1.6.8 Undo id (ui_ids.py)
+  assert struct.unpack_from('<I',old_menu,60)[0]==0
+  put(0x0819b2a8,old_menu[:60]+old_menu[80:100]+entry+old_menu[100:],'EU10 Select beside Undo in existing blank F9 cell; preserve eight actions')
+  a=ub('push {r4,r5,r6,lr}; mov r4,r0; mov r5,r1; bl 0x08171c4c; mov r0,r4; mov r1,r5; bl '+hex(uu['eu_glyph_paint'])+'; mov r0,r4; mov r1,r5; bl '+hex(uu['melodic_eu_glyph_paint'])+'; pop {r4,r5,r6,pc}')
+@@ -878,8 +885,8 @@ def build(base):
+  assert base[0x081a167c-BASE:0x081a167c-BASE+4]==struct.pack('<I',0x08171c4d)
+  put(0x081a167c,struct.pack('<I',a|1),'W14 HW3 melodic Euclid velocity glyph after native piano child drawing')
+  # CH11 drum-synth destinations in the native Mod Matrix (one-shot types 1/2).
+- assert base[0x0814eaea-BASE:0x0814eaf2-BASE]==bytes.fromhex('039e0f2e')
+- a=ub('push {r0-r3,r12,lr}; mov r0,r4; add r1,sp,#24; bl '+hex(uu['mod_rows'])+'; pop {r0-r3,r12,lr}; ldr r6,[sp,#0xc]; cmp r6,#0xf; bx lr')
++ assert base[0x0814eaea-BASE:0x0814eaee-BASE]==bytes.fromhex('ddf80cb0') # 1.6.8: ldr.w fp,[sp,#0xc]
++ a=ub('push {r0-r3,r12,lr}; mov r0,r4; add r1,sp,#24; bl '+hex(uu['mod_rows'])+'; pop {r0-r3,r12,lr}; ldr.w fp,[sp,#0xc]; bx lr') # 1.6.8: native cmp.w fp,#0xf follows
+  site(0x0814eaea,'bl '+hex(a),'CH11 synth pad rows in the native Mod Matrix')
+  for site_a,old,fn,why in [(0x08130596,0x08168558,'mod_token','save synth destination names'),(0x08130d46,0x08168580,'mod_key','load synth destination names'),(0x08142412,0x081347e4,'mod_edit','editing a synth route adopts the pad engine')]:
+   assert base[site_a-BASE:site_a-BASE+4]==asm('bl '+hex(old),site_a),hex(site_a)
+diff --git a/eu4_work/integration/perf_ui.c b/eu4_work/integration/perf_ui.c
+index 9888360..9f5b92c 100644
+--- a/eu4_work/integration/perf_ui.c
++++ b/eu4_work/integration/perf_ui.c
+@@ -805,7 +805,7 @@ int perf_bar_up(void *bar,void *point){
+ }
+ /* Saved with the track object (fx_save/fx_load). */
+ static void attr(void *params,const char *name,u32 value){void *a=NFN(0x08109fac,void*(*)(void*,const char*))(params,name);if(a)NFN(0x0810985e,void(*)(void*,u32))(a,value);}
+-__attribute__((section(".text.bank1a"))) void perf_save(void *object,void *params){ /* R6.14: in a bank-1 cave */
++void perf_save(void *object,void *params){ /* R6.14: in a bank-1 cave */
+  Perf *s=perf(0);if(!s||!object||!params)return;PerfTrack *e=entry(s,W(object,0x10),0);
+  if(e&&(e->on||e->velocity!=100))attr(params,"bento_perf_velocity",e->on<<8|e->velocity);
+  if(e&&(e->chord||e->type!=CHORD_DEFAULT_TYPE||e->voicing||e->inversion))attr(params,"bento_perf_chord",1u<<24|e->inversion<<16|e->voicing<<12|e->type<<4|e->chord);
+diff --git a/eu4_work/integration/ratchet_audio.ld b/eu4_work/integration/ratchet_audio.ld
+index b278ea2..7872028 100644
+--- a/eu4_work/integration/ratchet_audio.ld
++++ b/eu4_work/integration/ratchet_audio.ld
+@@ -1 +1,8 @@
+-SECTIONS { .text 0x080cf4c0 : { *(.text*) *(.rodata*) } .rt2 0x080da640 : { *(.rt2code*) } /DISCARD/ : { *(.ARM.exidx*) *(.ARM.extab*) *(.comment*) } }
++/* 1.6.8 port: the player is split by function over three checked zero slots. */
++SECTIONS {
++ .rta 0x080cfc80 : { *(.text.rt_block) }
++ .rtb 0x080d5960 : { *(.text._ZL3armPvjxjS_jjjjj) *(.text.__udivmoddi4) *(.text._ZL5blockv) *(.text._ZL10lc_ratchetj) }
++ .rtc 0x080d0e80 : { *(.text*) *(.rodata*) }
++ .rt2 0x080da640 : { *(.rt2code*) }
++ /DISCARD/ : { *(.ARM.exidx*) *(.ARM.extab*) *(.comment*) }
++}
+diff --git a/eu4_work/integration/step_lock_shared.h b/eu4_work/integration/step_lock_shared.h
+index 203ba1f..4a2a0b6 100644
+--- a/eu4_work/integration/step_lock_shared.h
++++ b/eu4_work/integration/step_lock_shared.h
+@@ -63,7 +63,7 @@ SLS u32 row_count(u32 a,u32 pass){
+  * Ratchet check (+20) = ~(+12 ^ +16): address-bound through the +12 check. */
+ #define RT_TAG 0x52000000u
+ #if defined(BENTO_UI_SHARED_WEAK) && !defined(__cplusplus)
+-#define SLS_B1 __attribute__((weak,section(".text.bank1a")))
++#define SLS_B1 __attribute__((weak)) /* 1.6.8: .bank1a slot holds the ratchet player */
+ #else
+ #define SLS_B1 static
+ #endif
+diff --git a/eu4_work/integration/step_lock_ui.c b/eu4_work/integration/step_lock_ui.c
+index 76427ed..1c927cf 100644
+--- a/eu4_work/integration/step_lock_ui.c
++++ b/eu4_work/integration/step_lock_ui.c
+@@ -22,7 +22,7 @@ typedef struct {u32 magic,view,seq,drum,kind,macro_fault,pick,choosing,error,nex
+ #define RT_PAGE ((U->auto_eu>>8)&1u)
+ #define U ((volatile UI*)0x24048000u)
+ _Static_assert(sizeof(UI)<=0x480,"Lock UI overlaps choice table");
+-#define BANK1 __attribute__((section(".text.bank1a")))
++#define BANK1 /* 1.6.8: .bank1a slot holds the ratchet player */
+ #define LOCK_COND_KEY NKEY(0x198u)
+ #define LOCK_READ_KEY NKEY(0x199u)
+ const char select_label[] __attribute__((used,retain))="Select";
+diff --git a/eu4_work/integration/ui.ld b/eu4_work/integration/ui.ld
+index 31368b9..7fe1ec6 100644
+--- a/eu4_work/integration/ui.ld
++++ b/eu4_work/integration/ui.ld
+@@ -1,15 +1,18 @@
+ SECTIONS {
+  /* Bank-1 M4 code (needs BENTO_M4_MPU_WIDE=1; build_fx.py refuses otherwise).
+     Listed first: .text.bank1* must not fall into .text below. */
++ . = 0x080d0190; .bank1k : { *(.bank1k) }
++ . = 0x080d02a0; .bank1l : { *(.bank1l) }
+  . = 0x080d0510; .bank1c : { *(.text.bank1c*) }
+  . = 0x080d1180; .bank1d : { *(.text.bank1d*) }
++ . = 0x080d1e70; .bank1j : { *(.bank1j) }
+  . = 0x080d1f20; .bank1g : { *(.text.bank1g*) }
++ . = 0x080d2060; .bank1i : { *(.bank1i) }
+  . = 0x080d2140; .bank1e : { *(.text.bank1e*) }
+  . = 0x080d3190; .bank1f : { *(.text.bank1f*) }
+- . = 0x080d5960; .bank1a : { *(.text.bank1a*) }
+  . = 0x080dbcd0; .bank1b : { *(.text.bank1b*) }
+  . = 0x081b6ed0; .pad6 : { *(.pad6) }
+- . = 0x081b7910; .panel : { *(.panel) }
++ . = 0x081b7920; .panel : { *(.panel) }
+  . = 0x081b7b10; .steptext : { *(.steptext) }
+  . = 0x081b7f80; .mixstrip : { *(.mixstrip) }
+  . = 0x081b8194; .pad8 : { *(.pad8) } /* run 13 */
+diff --git a/eu4_work/integration/workflow_ui.c b/eu4_work/integration/workflow_ui.c
+index 55ef70a..db0c2ef 100644
+--- a/eu4_work/integration/workflow_ui.c
++++ b/eu4_work/integration/workflow_ui.c
+@@ -30,7 +30,7 @@ static int touch(void *slot,int twice){return kit_seq_touch(slot,twice)||locks_t
+ void nav_tick(void);
+ /* R6.11 bank-1 proof: runs on every UI header tick from boot, so an M4 that
+    cannot execute flash bank 1 faults at once (owner hardware check). */
+-__attribute__((section(".text.bank1a"))) void workflow_periodic(void){
++void workflow_periodic(void){
+  kit_seq_periodic();nav_tick();
+  {extern void chord_track_tick(void) __attribute__((weak));extern void tr_tick(void) __attribute__((weak));if(chord_track_tick)chord_track_tick();if(tr_tick)tr_tick();} /* weak: partial test builds */ /* R6.6 (owner: chord pads stayed): page changes are seen here, not only on button messages */
+  Workflow *s=state(0);if(!s)return;
+diff --git a/k16_work/bento_controls/bento-1.6.1.json b/k16_work/bento_controls/bento-1.6.1.json
+index 32e2287..e941acc 100644
+--- a/k16_work/bento_controls/bento-1.6.1.json
++++ b/k16_work/bento_controls/bento-1.6.1.json
+@@ -10,7 +10,7 @@
+     },
+     "consumer": {
+       "address": "0x08141408",
+-      "original": "a5f11103"
++      "original": "3378113b"
+     }
+   },
+   "symbols": {
+@@ -205,4 +205,4 @@
+     "synth": "DaisySP SyntheticBassDrum",
+     "dedicated_synth_controls": false
+   }
+-}
++}
+\ No newline at end of file
+diff --git a/k16_work/bento_controls/build.py b/k16_work/bento_controls/build.py
+index f9ae53d..6c9c8af 100644
+--- a/k16_work/bento_controls/build.py
++++ b/k16_work/bento_controls/build.py
+@@ -56,7 +56,7 @@ def candidate(stock):
+  payload+=bytes(gap)+selection
+  payload+=b'\xff'*(-(len(stock)+len(payload))%4)
+  put(BASE+len(stock),payload,b'','Appended UI implementation')
+- for a,target,old,name in [(0x0808dcde,INPUT,'9c42f6d0','input'),(0x08141408,CONSUMER,'a5f11103','consumer'),(0x080404b6,STARTUP,'24482449','startup'),(0x081004b6,UI_STARTUP,'24482449','UI startup'),(0x0813d504,SELECTION,'f0b589b0','Drum selection observer')]:
++ for a,target,old,name in [(0x0808dcde,INPUT,'9c42f6d0','input'),(0x08141408,CONSUMER,'3378113b','consumer'),(0x080404b6,STARTUP,'24482449','startup'),(0x081004b6,UI_STARTUP,'24482449','UI startup'),(0x0813d504,SELECTION,'f0b589b0','Drum selection observer')]:
+   put(a,bytes(ks.asm('b.w '+hex(target),a)[0]),bytes.fromhex(old),name+' branch')
+  for a in [0x08040588,0x080a437c,0x080a4634]:put(a,struct.pack('<I',HEAP_END),struct.pack('<I',OLD_END),'Reserve 28064 bytes: kick, lock, condition and UI state; stack unchanged')
+  from plock_hooks import payloads,COMMAND,SEQUENCE,EVALUATE
+@@ -84,7 +84,7 @@ def candidate(stock):
+  put(0x081a0be8,struct.pack('<I',0x081b7f11),struct.pack('<I',0x0814d239),'Native mixer render adapter runs on UI thread')
+  color=p['empty_step_color']
+  put(int(color['address'],0),bytes.fromhex(color['replacement_hex']),bytes.fromhex(color['original_hex']),'Unlit empty steps; native active-step track color remains unchanged')
+- put(0x0818dd94,b'1.6K7\0',b'1.6.1\0','Visible experiment identifier')
++ put(0x0818dd94,b'1.6K7\0',b'1.6.8\0','Visible experiment identifier')
+  result=bytes(image)
+  assert restore(result,writes)==stock
+  for a,n in [(BASE,0x400),(0x080e0000,0x20000),(0x08100000,0x400)]:assert result[a-BASE:a-BASE+n]==stock[a-BASE:a-BASE+n]
+diff --git a/k16_work/bento_controls/consumer.s b/k16_work/bento_controls/consumer.s
+index 4b7239b..b9ea879 100644
+--- a/k16_work/bento_controls/consumer.s
++++ b/k16_work/bento_controls/consumer.s
+@@ -1,18 +1,20 @@
++// 1.6.8 port: the native loop keeps the 24-byte event record at r6 (sp+0x218) and
++// switches on ldrb [r6]-0x11 (hooks_168.py 'consumer'); 1.6.1 had it in r5..r7.
+ push.w {r0-r12, lr}
+ sub sp, #8
+-add.w r0, sp, #608
+-str r0, [sp]
++str r6, [sp]
+ mov r0, r4
+-mov r1, r5
+-mov r2, r6
+-mov r3, r7
++ldrb r1, [r6]
++ldr r2, [r6, #8]
++ldr r3, [r6, #12]
+ ldr r12, =0x081b7011
+ blx r12
+ cmp r0, #0
+ add sp, #8
+ pop.w {r0-r12, lr}
+ bne consumed
+-sub.w r3, r5, #17
++ldrb r3, [r6]
++subs r3, #0x11
+ push {r0, r1}
+ ldr r0, =@DISPATCH_STOCK@
+ str r0, [sp, #4]
+diff --git a/k16_work/bento_mods/AUDIT.json b/k16_work/bento_mods/AUDIT.json
+index c1d8cad..9d1e56c 100644
+--- a/k16_work/bento_mods/AUDIT.json
++++ b/k16_work/bento_mods/AUDIT.json
+@@ -34,7 +34,7 @@
+     },
+     "consumer": {
+       "address": "0x08141408",
+-      "original": "a5f11103"
++      "original": "3378113b"
+     }
+   },
+   "source_sha256": {
+diff --git a/k16_work/bento_mods/profiles/bento-1.6.1.json b/k16_work/bento_mods/profiles/bento-1.6.1.json
+index 48a9ad7..b122db6 100644
+--- a/k16_work/bento_mods/profiles/bento-1.6.1.json
++++ b/k16_work/bento_mods/profiles/bento-1.6.1.json
+@@ -10,7 +10,7 @@
+     },
+     "consumer": {
+       "address": "0x08141408",
+-      "original": "a5f11103"
++      "original": "3378113b"
+     }
+   },
+   "symbols": {

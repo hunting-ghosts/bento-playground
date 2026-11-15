@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.elf
+*.o
+*.a
+*.so
+*.bin
+*.BDG
+*.bdg
+*.dylib
+*.wav
+*.zip
+*.bundle
+.DS_Store
+build/
+private_firmware/
+.venv/
