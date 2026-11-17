@@ -23,6 +23,31 @@ them. They aren't a menu of firmware versions.
 | `research/display_emulator` | Emulator used by the tests (runs the real firmware code) |
 | `tools` | Builders, tests and helpers |
 
+## Safety and the bootloader
+
+The bootloader is the recovery path: while it is untouched, any broken build can be undone by reinstalling the
+official firmware. Everything below exists to keep it that way.
+
+**Where code may go (main chip, `bento1.bin`)**
+- `08000000..0803FFFF` – bootloader: never modified, never included.
+- `08040000..081E0000` – application: the only area we patch; the image must end at or below `081E0000`.
+- `080E0000..080FFFFF` – separate disk-mode program: never written (a build that did boot-looped).
+- `bento2.bin` (second chip) stays unchanged.
+
+**What the build enforces**
+- Input files must match known hashes.
+- Every patch has declared bounds, is four-byte aligned and reverses byte-for-byte to the original.
+- New code only goes into regions proven unused (zero) in the original, with guards.
+- Vector table, stack, heap and memory-protection settings are left as they are.
+- No automatic flashing.
+
+**Rules for contributors**
+- Never write to flash at runtime.
+- Never use a new flash region without proving it unused and adding a build guard.
+- Never commit firmware files, original or generated.
+- Test on hardware with a backup of the official firmware and your SD card. Include the SD-card diagnostics file and
+  the firmware label from Settings in bug reports.
+
 ## Build for 1.6.8
 
 Use Python 3.10+ and clang as your C/C++ compiler (`cc`). The ARM compiler is
